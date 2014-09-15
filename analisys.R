@@ -1,20 +1,24 @@
 library('caret')
 library(pROC)
 library(doMC)
-registerDoMC(cores=3)
+library(Amelia)
+registerDoMC(cores=4)
 getDoParWorkers()
 
 # load data
 trainRawData <- read.csv("data/pml-training.csv",na.strings=c("NA",""))
 
+missmap(trainRawData, main = "Missingness map for full training dataset")
+
 # make training set
 trainDataFull <-trainRawData[ , !apply(trainRawData, 2, function(x) any(is.na(x)) ) ]
+trainDataFull$classe <- as.factor(trainDataFull$classe)
 
 # remove unuseful columns
 removeIndex<- grep("timestamp|X|user_name|new_window|num_window", colnames(trainDataFull))
 trainDataCleaned <- trainDataFull[,-removeIndex]
 
-trainIndex <- createDataPartition(y = trainDataCleaned$classe, p=0.7,list=FALSE)
+trainIndex <- createDataPartition(y = trainDataCleaned$classe, p=0.007,list=FALSE)
 trainData <- trainDataCleaned[trainIndex,]
 testTrainData <- trainDataCleaned[-trainIndex,]
 
@@ -25,16 +29,15 @@ modRFFit
 
 #Try to propose alternative model
 fitControl <- trainControl(## 10-fold CV
-    method = "repeatedcv",
+    method = "cv",
     number = 10,
     ## repeated ten times
-    repeats = 10)
-modGBM <- train(trainData$classe ~. ,
-                data = trainData,
-                method = "gbm",
-                trControl = fitControl,
-                verbose = FALSE,
-                importance = TRUE)
+    ## repeats = 10
+    )
+gbmGrid <-  expand.grid(interaction.depth = 1,
+                        n.trees = 200,
+                        shrinkage = 0.1)
+modGBM <- train(classe ~. , data = trainData, method = "gbm", trControl = fitControl, verbose = FALSE, tuneGrid = gbmGrid)
 
 modGBM
 #crosvalidation of the model
@@ -42,10 +45,13 @@ modGBM
 answersRFFit <- predict(modRFFit, testTrainData)
 answersGbmFit <- predict(modGBM, testTrainData)
 
-confusionMatrix(testTrainData$classe, answersRFFit)
-confusionMatrix(testTrainData$classe, answersGbmFit)
+rfConfMatr <- confusionMatrix(testTrainData$classe, answersRFFit)
+gbmConfMatr <- confusionMatrix(testTrainData$classe, answersGbmFit)
 
-
+rfAccuracy <- rfConfMatr$overall['Accuracy']
+gbmAccuracy <- gbmConfMatr$overall['Accuracy']
+rfAccuracy
+gbmAccuracy
 ####Train winner model on all available data
 modRFFit <- train(classe ~.,data = trainDataCleaned,method="rf")
 modRFFit
@@ -59,5 +65,7 @@ testData <- testData[,-removeIndex]
 answersRFFit <- predict(modRFFit, testData,type='raw')
 answersGbmFit <- predict(modGBM, testData,type='raw')
 
-source("mpl_write_file.R");
-pml_write_files(answersRFFit)
+answersRFFit
+answersGbmFit
+#source("mpl_write_file.R");
+#pml_write_files(answersRFFit)
