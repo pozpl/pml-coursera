@@ -1,4 +1,5 @@
 pml-coursera
 ============
 
-Practical mchine learning course project 
+Practical machine learning course project.
+
