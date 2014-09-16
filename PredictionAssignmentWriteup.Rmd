@@ -1,0 +1,102 @@
+---
+title: "Prediction Assignment Write-up"
+author: "Pavel Pozdnyak"
+date: "10.09.2014"
+output: html_document
+---
+```{r echo=FALSE,results='hide'}
+suppressPackageStartupMessages(library('caret'))
+suppressPackageStartupMessages(library('randomForest'))
+suppressPackageStartupMessages(library('gbm'))
+suppressPackageStartupMessages(library(pROC))
+suppressPackageStartupMessages(library(doMC))
+suppressPackageStartupMessages(library(Amelia))
+registerDoMC(cores=3)
+getDoParWorkers()
+```
+
+=====================================================
+
+##Summary
+This is description of application of several models in order to predict peoples activity class. Also here presented essence of data cleaning procedures performed on training and testing datasets.
+
+##Exploratory domain synopsys
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behaviour, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website [here](http://groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset). 
+
+The main objective of this course project is to build a model to predict the type of exercise (classe in the dataset) using data collected from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants.
+
+##Data preprocessing 
+First of all we load data 
+```{r}
+trainRawData <- read.csv("data/pml-training.csv",na.strings=c("NA",""))
+```
+After some exploratory analysis of dataset performed with help of Amelia package it's obvious that dataset has many columns with no data for this types of measurements (I.e. NA in almost every column). 
+
+```{r}
+missmap(trainRawData, main = "Missingness map for full training dataset")
+```
+
+This columns and columns that does not bring any sufficient information we will illuminate from our dataset.
+
+```{r}
+trainDataFull <-trainRawData[ , !apply(trainRawData, 2, function(x) any(is.na(x)) ) ]
+trainDataFull$classe <- as.factor(trainDataFull$classe)
+removeIndex<- grep("timestamp|X|user_name|new_window|num_window", colnames(trainDataFull))
+trainDataCleaned <- trainDataFull[,-removeIndex]
+```
+##Description of models
+In order to predict type of exercise I will try random forest and generalised boosted models, then model with best results (according to validation on subset of training set) will be chosen. First of all given training set is devided into training and test set.
+
+```{r}
+trainIndex <- createDataPartition(y = trainDataCleaned$classe, p=0.7,list=FALSE)
+trainData <- trainDataCleaned[trainIndex,]
+testTrainData <- trainDataCleaned[-trainIndex,]
+```
+
+Then models are taught on training part of the entire set. For this two models  we can configure cross validation parameters. Here presented repeated K-fold cross validation with 10 folds.
+
+```{r eval=FALSE}
+set.seed(6578)
+fitControl <- trainControl(method = "repeatedcv", number = 10, repeats = 10)
+# make RF model
+modRFFit <- train(trainData$classe ~.,data = trainData,method="rf", trControl = fitControl)
+
+```
+
+```{r eval=FALSE}
+modGBM <- train(trainData$classe ~. , data = trainData, method = "gbm", 
+                trControl = fitControl, verbose = FALSE)
+```
+##Final model selection
+Prediction quality for this two models on subset of all training data that I decide to take as an cross validation test set for models choosing is:
+
+```{r eval=FALSE}
+answersRFFit <- predict(modRFFit, testTrainData)
+answersGbmFit <- predict(modGBM, testTrainData)
+
+rfConfMatr <- confusionMatrix(testTrainData$classe, answersRFFit)
+gbmConfMatr <- confusionMatrix(testTrainData$classe, answersGbmFit)
+
+rfAccuracy <- rfConfMatr$overall['Accuracy']
+gbmAccuracy <- gbmConfMatr$overall['Accuracy']
+```
+
+
+
+ Model                      | Accuracy          
+ ---------------------------|------------
+ Random Forest              | 100%                 
+ Generalized Boosting model | 98.487%
+
+From this data we can assume that rundom forest on this setting have slightly better accuracy so for final modeling I will use them.
+
+```{r eval=FALSE}
+testRawData <- read.csv("data/pml-testing.csv",na.strings=c("NA",""))
+testData<-testRawData[ , !apply(testRawData, 2, function(x) any(is.na(x)) ) ]
+testData <- testData[,-removeIndex]
+
+answersRFFit <- predict(modRFFit, testData,type='raw')
+answersRFFit
+```
+
