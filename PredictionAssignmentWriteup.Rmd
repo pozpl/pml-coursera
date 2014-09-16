@@ -69,7 +69,7 @@ modGBM <- train(trainData$classe ~. , data = trainData, method = "gbm",
                 trControl = fitControl, verbose = FALSE)
 ```
 ##Final model selection
-Prediction quality for this two models on subset of all training data that I decide to take as an cross validation test set for models choosing is:
+Prediction quality for this two models on subset of all training data that I decide to take as an out of sample test set for models choosing is:
 
 ```{r eval=FALSE}
 answersRFFit <- predict(modRFFit, testTrainData)
